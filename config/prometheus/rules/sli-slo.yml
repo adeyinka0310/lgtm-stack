@@ -1,0 +1,85 @@
+groups:
+  - name: sli_definitions
+    interval: 30s
+    rules:
+
+      # ─────────────────────────────────────────
+      # SIGNAL 1: LATENCY
+      # How long does it take to serve a request?
+      # SLI: 95th percentile latency of successful requests over 5 minutes
+      # ─────────────────────────────────────────
+      - record: sli:latency:p95_5m
+        expr: |
+          histogram_quantile(0.95,
+            sum by(le) (
+              rate(flask_http_request_duration_seconds_bucket{status="200"}[5m])
+            )
+          )
+
+      - record: sli:latency:p99_5m
+        expr: |
+          histogram_quantile(0.99,
+            sum by(le) (
+              rate(flask_http_request_duration_seconds_bucket{status="200"}[5m])
+            )
+          )
+
+      # ─────────────────────────────────────────
+      # SIGNAL 2: TRAFFIC
+      # How much demand is the system handling?
+      # SLI: Requests per second averaged over 5 minutes
+      # ─────────────────────────────────────────
+      - record: sli:traffic:rps_5m
+        expr: |
+          sum(rate(flask_http_request_total[5m]))
+
+      # ─────────────────────────────────────────
+      # SIGNAL 3: ERRORS
+      # What fraction of requests are failing?
+      # SLI: Ratio of 5xx responses to total responses over 5 minutes
+      # ─────────────────────────────────────────
+      - record: sli:errors:ratio_5m
+        expr: |
+          sum(rate(flask_http_request_total{status=~"5.."}[5m]))
+          /
+          sum(rate(flask_http_request_total[5m]))
+
+      # Success ratio (inverse — used for SLO compliance)
+      - record: sli:availability:ratio_5m
+        expr: |
+          1 - (
+            sum(rate(flask_http_request_total{status=~"5.."}[5m]))
+            /
+            sum(rate(flask_http_request_total[5m]))
+          )
+
+      # ─────────────────────────────────────────
+      # SIGNAL 4: SATURATION
+      # How "full" is the system?
+      # SLI: CPU utilisation, memory utilisation
+      # ─────────────────────────────────────────
+      - record: sli:saturation:cpu_5m
+        expr: |
+          100 - (avg by(instance) (
+            rate(node_cpu_seconds_total{mode="idle"}[5m])
+          ) * 100)
+
+      - record: sli:saturation:memory_ratio
+        expr: |
+          1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+
+      - record: sli:saturation:disk_ratio
+        expr: |
+          1 - (
+            node_filesystem_avail_bytes{mountpoint="/"}
+            /
+            node_filesystem_size_bytes{mountpoint="/"}
+          )
+
+      # ─────────────────────────────────────────
+      # BLACKBOX: AVAILABILITY
+      # SLI: Fraction of HTTP probes that succeed
+      # ─────────────────────────────────────────
+      - record: sli:probe:success_ratio_5m
+        expr: |
+          avg_over_time(probe_success[5m])

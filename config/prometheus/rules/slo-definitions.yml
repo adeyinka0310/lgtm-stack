@@ -1,0 +1,81 @@
+groups:
+  - name: slo_burn_rates
+    interval: 30s
+    rules:
+
+      - record: slo:availability:burn_rate_1h
+        expr: |
+          1 - (
+            sum(rate(flask_http_request_total{status!~"5.."}[1h]))
+            /
+            sum(rate(flask_http_request_total[1h]))
+          )
+
+      - record: slo:availability:burn_rate_6h
+        expr: |
+          1 - (
+            sum(rate(flask_http_request_total{status!~"5.."}[6h]))
+            /
+            sum(rate(flask_http_request_total[6h]))
+          )
+
+      - record: slo:availability:ratio_30d
+        expr: |
+          sum(rate(flask_http_request_total{status!~"5.."}[7d]))
+          /
+          sum(rate(flask_http_request_total[7d]))
+
+      - record: slo:availability:error_budget_remaining
+        expr: |
+          1 - (
+            (1 - slo:availability:ratio_30d) / 0.005
+          )
+
+      # Fixed: sum both numerator and denominator independently
+      # so label sets always match
+      - record: slo:latency:ratio_under_500ms_5m
+        expr: |
+          sum(rate(flask_http_request_duration_seconds_bucket{le="0.5"}[5m]))
+          /
+          sum(rate(flask_http_request_duration_seconds_bucket{le="+Inf"}[5m]))
+
+      - record: slo:latency:ratio_under_500ms_30d
+        expr: |
+          sum(rate(flask_http_request_duration_seconds_bucket{le="0.5"}[7d]))
+          /
+          sum(rate(flask_http_request_duration_seconds_bucket{le="+Inf"}[7d]))
+
+      - record: slo:probe:ratio_30d
+        expr: |
+          avg_over_time(probe_success[7d])
+
+      - record: slo:probe:error_budget_remaining
+        expr: |
+          1 - ((1 - slo:probe:ratio_30d) / 0.005)
+
+  - name: slo_alerts
+    rules:
+
+      - alert: AvailabilitySLOFastBurn
+        expr: slo:availability:burn_rate_1h > 0.005 * 14.4
+        for: 5m
+        labels:
+          severity: critical
+          slo: availability
+        annotations:
+          summary: "Fast burn on availability SLO"
+          description: "Error rate {{ $value | printf \"%.4f\" }} — burning budget 14x faster than allowed"
+          runbook: "http://YOUR_GRAFANA_IP:3000/runbooks/slo-fast-burn"
+          dashboard: "http://YOUR_GRAFANA_IP:3000/d/slo-dashboard"
+
+      - alert: AvailabilitySLOSlowBurn
+        expr: slo:availability:burn_rate_6h > 0.005 * 5
+        for: 15m
+        labels:
+          severity: warning
+          slo: availability
+        annotations:
+          summary: "Slow burn on availability SLO"
+          description: "Error rate {{ $value | printf \"%.4f\" }} — burning budget 5x faster than target"
+          runbook: "http://YOUR_GRAFANA_IP:3000/runbooks/slo-slow-burn"
+          dashboard: "http://YOUR_GRAFANA_IP:3000/d/slo-dashboard"

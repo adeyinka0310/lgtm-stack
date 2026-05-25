@@ -1,0 +1,72 @@
+groups:
+  - name: infrastructure
+    rules:
+      - alert: HighCPUWarning
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU on {{ $labels.instance }}"
+          description: "CPU at {{ $value | printf \"%.1f\" }}% for 5+ minutes"
+          value: "{{ $value | printf \"%.1f\" }}%"
+
+      - alert: HighCPUCritical
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical CPU on {{ $labels.instance }}"
+          description: "CPU at {{ $value | printf \"%.1f\" }}% for 10+ minutes"
+          value: "{{ $value | printf \"%.1f\" }}%"
+
+      - alert: HighMemoryWarning
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory on {{ $labels.instance }}"
+          description: "Memory at {{ $value | printf \"%.1f\" }}%"
+          value: "{{ $value | printf \"%.1f\" }}%"
+
+      - alert: HighMemoryCritical
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical memory on {{ $labels.instance }}"
+          description: "Memory at {{ $value | printf \"%.1f\" }}%"
+          value: "{{ $value | printf \"%.1f\" }}%"
+
+      - alert: DiskSpaceWarning
+        expr: (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 75
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space warning on {{ $labels.instance }}"
+          description: "Disk at {{ $value | printf \"%.1f\" }}% on /"
+          value: "{{ $value | printf \"%.1f\" }}%"
+
+      - alert: DiskSpaceCritical
+        expr: (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Disk at {{ $value | printf \"%.1f\" }}% on /"
+          value: "{{ $value | printf \"%.1f\" }}%"
+
+      - alert: ServerDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} is unreachable"
+          description: "Target {{ $labels.instance }} has been down for 2+ minutes"
+          value: "DOWN"

@@ -1,0 +1,21 @@
+{{ define "slack.title" }}
+{{- if eq .Status "firing" }}🔴 [FIRING:{{ .Alerts.Firing | len }}]{{ else }}✅ [RESOLVED]{{ end }} {{ .CommonLabels.alertname }}
+{{ end }}
+
+{{ define "slack.color" }}
+{{- if eq .Status "resolved" }}good
+{{- else if eq .CommonLabels.severity "critical" }}danger
+{{- else }}warning{{ end }}
+{{ end }}
+
+{{ define "slack.text" }}
+{{ range .Alerts }}
+*Alert:* {{ .Annotations.summary }}
+*Severity:* `{{ .Labels.severity | toUpper }}`
+*Host:* `{{ .Labels.instance }}`
+*Value:* {{ .Annotations.value }}
+*Description:* {{ .Annotations.description }}
+{{ if .Annotations.dashboard }}*Dashboard:* <{{ .Annotations.dashboard }}|Open in Grafana>{{ end }}
+{{ if .Annotations.runbook }}*Runbook:* <{{ .Annotations.runbook }}|View Runbook>{{ end }}
+{{ end }}
+{{ end }}
