@@ -1,0 +1,82 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: 'Simulate a deployment failure'
+        required: false
+        default: 'false'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record pipeline start time
+        run: echo "PIPELINE_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          pip install flask \
+            opentelemetry-api \
+            opentelemetry-sdk \
+            prometheus-flask-exporter
+
+      - name: Run tests
+        run: |
+          echo "Running tests..."
+          sleep 2
+          echo "All tests passed"
+
+      - name: Simulate failure if requested
+        if: github.event.inputs.simulate_failure == 'true'
+        run: |
+          echo "Simulating deployment failure!"
+          exit 1
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record deploy start
+        run: echo "DEPLOY_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Deploy application
+        run: |
+          echo "Deploying to production..."
+          sleep 3
+          echo "Deployment complete"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          curl -s -X POST "${{ secrets.METRICS_ENDPOINT }}/api/v1/deployments" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "status": "success",
+              "commit": "${{ github.sha }}",
+              "actor": "${{ github.actor }}",
+              "branch": "${{ github.ref_name }}",
+              "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
+            }' || echo "Metrics endpoint not configured yet"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          curl -s -X POST "${{ secrets.METRICS_ENDPOINT }}/api/v1/deployments" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "status": "failure",
+              "commit": "${{ github.sha }}",
+              "actor": "${{ github.actor }}",
+              "branch": "${{ github.ref_name }}",
+              "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
+            }' || echo "Metrics endpoint not configured yet"

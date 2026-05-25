@@ -1,0 +1,55 @@
+groups:
+  - name: dora_metrics
+    interval: 60s
+    rules:
+
+      # Deployment Frequency — deployments per day (rolling 30 days)
+      - record: dora:deployment_frequency:daily
+        expr: |
+          sum(increase(dora_deployments_total{status="success"}[1d]))
+
+      # Change Failure Rate — failed / total deployments (rolling 7 days)
+      - record: dora:change_failure_rate:7d
+        expr: |
+          sum(increase(dora_deployment_failures_total[7d]))
+          /
+          sum(increase(dora_deployments_total[7d]))
+
+      # DORA classification thresholds (for dashboard display)
+      # Deployment Frequency:
+      #   Elite:  multiple per day  (>1/day)
+      #   High:   once per week     (>0.14/day)
+      #   Medium: once per month    (>0.033/day)
+      #   Low:    less than monthly (<0.033/day)
+
+      # CFR classification:
+      #   Elite:  <5%
+      #   High:   <10%
+      #   Medium: <15%
+      #   Low:    >15%
+
+      # MTTR p50 (median time to restore)
+      - record: dora:mttr:p50
+        expr: |
+          histogram_quantile(0.50,
+            sum by(le) (rate(dora_incident_duration_seconds_bucket[30d]))
+          )
+
+      # Lead time p50
+      - record: dora:lead_time:p50
+        expr: |
+          histogram_quantile(0.50,
+            sum by(le) (rate(dora_lead_time_seconds_bucket[30d]))
+          )
+
+  - name: dora_alerts
+    rules:
+      # Alert if CFR exceeds 15% (Low DORA classification)
+      - alert: HighChangeFailureRate
+        expr: dora:change_failure_rate:7d > 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Change Failure Rate above 15%"
+          description: "CFR is {{ $value | printf \"%.1f\" }}% — classified as Low performer per DORA benchmarks"
